@@ -3,6 +3,7 @@ import streamlit as st
 from PIL import Image, ImageOps, ImageDraw
 import numpy as np
 import cv2
+import rawpy
 
 # ========================= CONFIG =========================
 
@@ -12,9 +13,32 @@ os.makedirs(PASTA_ENTRADA, exist_ok=True)
 PASTA_SAIDA = "./saida"
 os.makedirs(PASTA_SAIDA, exist_ok=True)
 
+# Mapa: nome_original → nome_convertido
+arquivos_convertidos = {}
+
 st.set_page_config(layout="wide", page_title="Visualizador de Zoom com Detecção de Rosto")
-st.title("📸 Visualizador de Zoom + Detecção de Rosto + Upload")
+st.title("📸 Visualizador de Zoom + Detecção de Rosto + Upload (CR3 Suportado)")
 st.markdown("---")
+
+# ========================= FUNÇÃO CR3 =========================
+
+def carregar_cr3(path):
+    """Carrega CR3 e converte para PIL.Image RGB com brilho corrigido."""
+    try:
+        with rawpy.imread(path) as raw:
+            rgb = raw.postprocess(
+                use_camera_wb=True,
+                use_auto_wb=True,
+                no_auto_bright=False,  # ativa auto brilho
+                bright=1.3,            # ajuste fino
+                gamma=(2.2, 4.5),      # curva comum de exibição
+                output_bps=8
+            )
+            return Image.fromarray(rgb)
+    except Exception as e:
+        st.error(f"❌ Erro ao converter {os.path.basename(path)}: {e}")
+        return None
+
 
 # ========================= FACE DETECTOR =========================
 
@@ -34,6 +58,7 @@ def detectar_rosto(img_pil):
 
     return sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
 
+
 # ========================= FUNÇÃO DE PROCESSAMENTO =========================
 
 def processar_imagem(img_original, zoom_fator, tamanho_max):
@@ -45,7 +70,7 @@ def processar_imagem(img_original, zoom_fator, tamanho_max):
 
     w_orig, h_orig = img_original.size
 
-    # ---------- DETECÇÃO DE ROSTO ----------
+    # ---------- DETECÇÃO ----------
     face = detectar_rosto(img_original)
 
     if face is not None:
@@ -68,11 +93,10 @@ def processar_imagem(img_original, zoom_fator, tamanho_max):
 
     left = max(0, min(left, w_orig - janela_w))
     top = max(0, min(top, h_orig - janela_h))
-
     right = left + janela_w
     bottom = top + janela_h
 
-    # ---------- CORTE ----------
+    # ---------- CORTAR ----------
     img_crop = img_original.crop((left, top, right, bottom))
 
     # ---------- REDIMENSIONAR ----------
@@ -84,10 +108,10 @@ def processar_imagem(img_original, zoom_fator, tamanho_max):
 
 # ========================= SIDEBAR =========================
 
-st.sidebar.header("Upload das Imagens")
+st.sidebar.header("Upload das Imagens (JPG/PNG/CR3)")
 uploads = st.sidebar.file_uploader(
     "Arraste uma ou várias imagens",
-    type=['jpg', 'jpeg', 'png'],
+    type=['jpg', 'jpeg', 'png', 'cr3'],
     accept_multiple_files=True
 )
 
@@ -102,10 +126,12 @@ zoom_fator = st.sidebar.slider("Zoom (-z)", min_value=1.0, max_value=5.0, value=
 
 processar_agora = st.sidebar.button("🚀 Processar tudo agora")
 
+
 # ========================= TRATAR UPLOADS =========================
 
 if uploads:
     if limpar_pasta:
+        arquivos_convertidos.clear()
         for f in os.listdir(PASTA_ENTRADA):
             try:
                 os.remove(os.path.join(PASTA_ENTRADA, f))
@@ -113,26 +139,67 @@ if uploads:
                 pass
 
     for arquivo in uploads:
-        with open(os.path.join(PASTA_ENTRADA, arquivo.name), "wb") as f:
-            f.write(arquivo.getbuffer())
+        nome_original = arquivo.name
+        nome_lower = nome_original.lower()
 
-    st.success(f"✔ {len(uploads)} imagem(ns) salva(s) na pasta 'entrada/'")
+        # ----------- CR3 -----------
+        if nome_lower.endswith(".cr3"):
+            temp_path = os.path.join(PASTA_ENTRADA, nome_original)
+
+            # salvar CR3 temporário
+            with open(temp_path, "wb") as f:
+                f.write(arquivo.getbuffer())
+
+            # converter
+            img = carregar_cr3(temp_path)
+
+            if img is None:
+                st.error(f"⚠ Não foi possível converter '{arquivo.name}'. O arquivo CR3 foi mantido.")
+                continue
+
+            # nome final .jpg
+            base = os.path.splitext(nome_original)[0]
+            jpg_filename = base + ".jpg"
+            jpg_path = os.path.join(PASTA_ENTRADA, jpg_filename)
+
+            # salvar JPG
+            img.save(jpg_path, "JPEG", quality=90)
+
+            # remover CR3 original
+            os.remove(temp_path)
+
+            # registrar conversão
+            arquivos_convertidos[nome_original] = jpg_filename
+
+            st.success(f"✔ {nome_original} convertido para {jpg_filename}")
+
+        # ----------- JPG / PNG -----------
+        else:
+            final_path = os.path.join(PASTA_ENTRADA, nome_original)
+            with open(final_path, "wb") as f:
+                f.write(arquivo.getbuffer())
+
+            arquivos_convertidos[nome_original] = nome_original
+
+    st.success(f"✔ Upload concluído! {len(uploads)} imagem(ns) processadas.")
 
 
 # ========================= CARREGAR TODAS AS IMAGENS =========================
 
-arquivos = [f for f in os.listdir(PASTA_ENTRADA)
-            if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-arquivos.sort()
+arquivos = sorted(
+    f for f in os.listdir(PASTA_ENTRADA)
+    if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+)
 
 if len(arquivos) == 0:
     st.info("Nenhuma imagem na pasta 'entrada/'. Envie arquivos no painel lateral.")
     st.stop()
 
+
 # ========================= PROCESSAMENTO AUTOMÁTICO =========================
 
 if processar_agora:
-    st.warning("Processando imagens... aguarde alguns segundos.")
+    st.warning("Processando imagens...")
 
     for filename in arquivos:
         input_path = os.path.join(PASTA_ENTRADA, filename)
@@ -141,9 +208,9 @@ if processar_agora:
         img_final, _, _ = processar_imagem(img_original, zoom_fator, tamanho_max)
 
         output_path = os.path.join(PASTA_SAIDA, os.path.splitext(filename)[0] + ".jpg")
-        img_final.save(output_path, "JPEG", quality=80, optimize=True)
+        img_final.save(output_path, "JPEG", quality=85, optimize=True)
 
-    st.success(f"✔ Todas as imagens foram processadas e salvas na pasta '{PASTA_SAIDA}'!")
+    st.success(f"✔ Todas as imagens foram processadas e salvas em '{PASTA_SAIDA}'!")
     st.balloons()
 
 
@@ -161,7 +228,7 @@ for filename in arquivos:
 
     left, top, right, bottom = crop_box
 
-    # ---------- PREVIEW ----------
+    # ---------- PREVIEW ORIGINAL ----------
     img_preview = img_original.copy()
     draw = ImageDraw.Draw(img_preview)
 
@@ -171,7 +238,6 @@ for filename in arquivos:
 
     draw.rectangle([left, top, right, bottom], outline="red", width=4)
 
-    # ---------- EXIBIÇÃO ----------
     col1, col2 = st.columns(2)
 
     with col1:
