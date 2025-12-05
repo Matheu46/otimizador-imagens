@@ -4,6 +4,7 @@ from PIL import Image, ImageOps, ImageDraw
 import numpy as np
 import cv2
 import rawpy
+import mediapipe as mp
 
 # ========================= CONFIG =========================
 
@@ -42,21 +43,48 @@ def carregar_cr3(path):
 
 # ========================= FACE DETECTOR =========================
 
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
+mp_face = mp.solutions.face_detection
 
 def detectar_rosto(img_pil):
-    img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+    """Retorna (x, y, w, h) do rosto principal usando MediaPipe."""
+    img_rgb = np.array(img_pil)
 
-    faces = face_cascade.detectMultiScale(
-        img_cv, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
-    )
+    with mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.5) as detector:
+        resultado = detector.process(img_rgb)
 
-    if len(faces) == 0:
-        return None
+        if not resultado.detections:
+            return None
 
-    return sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
+        # Pega a maior confiança
+        detec = max(resultado.detections, key=lambda d: d.score[0])
+
+        bbox = detec.location_data.relative_bounding_box
+
+        ih, iw, _ = img_rgb.shape
+
+        # MediaPipe retorna valores normalizados (0 a 1)
+        x = int(bbox.xmin * iw)
+        y = int(bbox.ymin * ih)
+        w = int(bbox.width * iw)
+        h = int(bbox.height * ih)
+
+        return (x, y, w, h)
+
+# face_cascade = cv2.CascadeClassifier(
+#     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+# )
+
+# def detectar_rosto(img_pil):
+#     img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+
+#     faces = face_cascade.detectMultiScale(
+#         img_cv, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
+#     )
+
+#     if len(faces) == 0:
+#         return None
+
+#     return sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
 
 
 # ========================= FUNÇÃO DE PROCESSAMENTO =========================
