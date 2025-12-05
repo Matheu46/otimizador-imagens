@@ -1,0 +1,36 @@
+# --- Python (Bytecode e Cache) ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Ambientes Virtuais (Virtualenvs) ---
+# Nomes comuns de venvs
+env/
+venv/
+.env
+.venv/
+
+# --- IDEs e Editores (Opcional, mas recomendado) ---
+.vscode/
+.idea/
+*.swp
+
+# --- Streamlit ---
+# Configurações locais e segredos nunca devem subir
+.streamlit/secrets.toml
+# A pasta .streamlit em si pode subir se tiver apenas config.toml (tema),
+# mas se tiver dúvidas, ignore tudo:
+# .streamlit/
+
+# --- DADOS DO PROJETO (Imagens) ---
+# Ignora todo o conteúdo das pastas de trabalho
+# Assim você não commita 500MB de fotos sem querer
+entrada/*
+saida/*
+compressor/*
+
+# --- Exceção para manter as pastas ---
+# Isso diz ao git: "Ignore tudo na pasta entrada, MENOS o arquivo .gitkeep"
+# Isso garante que a pasta vazia exista quando você clonar o projeto.
+!entrada/.gitkeep
+!saida/.gitkeep
