@@ -123,6 +123,11 @@ limpar_pasta = st.sidebar.checkbox(
 st.sidebar.header("Configurações")
 tamanho_max = st.sidebar.number_input("Tamanho Máximo (px)", value=1000, step=100)
 zoom_fator = st.sidebar.slider("Zoom (-z)", min_value=1.0, max_value=5.0, value=1.0, step=0.1)
+qualidade_jpeg = st.sidebar.slider(
+    "Qualidade do JPG (quality=)", 
+    min_value=40, max_value=100, value=85,
+    help="Valores maiores = melhor qualidade e arquivos maiores."
+)
 
 processar_agora = st.sidebar.button("🚀 Processar tudo agora")
 
@@ -208,7 +213,7 @@ if processar_agora:
         img_final, _, _ = processar_imagem(img_original, zoom_fator, tamanho_max)
 
         output_path = os.path.join(PASTA_SAIDA, os.path.splitext(filename)[0] + ".jpg")
-        img_final.save(output_path, "JPEG", quality=85, optimize=True)
+        img_final.save(output_path, "JPEG", quality=qualidade_jpeg, optimize=True)
 
     st.success(f"✔ Todas as imagens foram processadas e salvas em '{PASTA_SAIDA}'!")
     st.balloons()
