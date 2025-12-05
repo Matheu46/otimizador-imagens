@@ -242,10 +242,10 @@ for filename in arquivos:
 
     with col1:
         st.caption("Original + Detecção")
-        st.image(img_preview, use_column_width=True)
+        st.image(img_preview, width="stretch")
 
     with col2:
         st.caption(f"Resultado ({img_final.width}x{img_final.height})")
-        st.image(img_final, use_column_width=True)
+        st.image(img_final, width="content")
 
     st.markdown("---")
